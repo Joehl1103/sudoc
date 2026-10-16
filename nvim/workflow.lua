@@ -2,14 +2,14 @@
 local module_path = debug.getinfo(1, 'S').source:sub(2)
 local project_directory = vim.fn.fnamemodify(module_path, ':p:h:h')
 local cli_path = project_directory .. '/cli.js'
-local namespace = vim.api.nvim_create_namespace('workflow-experiment')
-local group = vim.api.nvim_create_augroup('WorkflowExperiment', { clear = true })
+local namespace = vim.api.nvim_create_namespace('sudoc')
+local group = vim.api.nvim_create_augroup('Sudoc', { clear = true })
 local requests = {}
 local plugin = { namespace = namespace }
 
 -- Give editor failures an actionable message without echoing authored content.
 local function report_error(message)
-    vim.notify('Workflow: ' .. message, vim.log.levels.ERROR)
+    vim.notify('Sudoc: ' .. message, vim.log.levels.ERROR)
 end
 
 local function buffer_text(buffer)
@@ -57,7 +57,7 @@ function plugin.lint(buffer)
                     severity = severity,
                     message = item.message,
                     code = item.code,
-                    source = 'Workflow Experiment',
+                    source = 'Sudoc',
                 })
             end
             vim.diagnostic.set(namespace, buffer, diagnostics)
@@ -70,7 +70,7 @@ function plugin.format(buffer)
     local command = { 'node', cli_path, 'format', '-' }
     local result = vim.system(command, { text = true, stdin = buffer_text(buffer), timeout = 5000 }):wait()
     if result.code ~= 0 then
-        vim.notify('Workflow: fix syntax errors before formatting; run :WorkflowLint.', vim.log.levels.WARN)
+        vim.notify('Sudoc: fix syntax errors before formatting; run :SudocLint.', vim.log.levels.WARN)
         plugin.lint(buffer)
         return
     end
@@ -109,11 +109,11 @@ local function attach(buffer)
     vim.api.nvim_buf_call(buffer, function()
         vim.cmd([[
             syntax case ignore
-            syntax match WorkflowKeyword /^\s*\zs\%(FOR\s\+EACH\|DEFINE\|WHERE\|IF\|ELSE\|DO\|THEN\|USING\|NOTE\|STOP\)\>/
+            syntax match WorkflowKeyword /^\s*\zs\%(FOR\s\+EACH\|DEFINE\|WHERE\|IF\|ELSE\|DO\|THEN\|USING\|NOTE\|STOP\|VERSION\|INPUT\|OUTPUT\|RUN\|WITH\|CHECK\|INTERPRET\|QUESTION\|LIMIT\|EVIDENCE\|ACCEPT\|JEV\|CONFIDENCE\|ON\|UNKNOWN\|REVIEW\|REJECT\|FAILURE\|PROVIDE\|AS\)\>/
             syntax match WorkflowOperator /\<\%(AND\|OR\|NOT\|IN\)\>\|===\|==\|!=/
             syntax case match
             syntax match WorkflowSymbol /\%(^\|[^A-Za-z0-9._%+-]\)\zs@[A-Z][A-Z0-9_]*/
-            syntax match WorkflowVariable /\$[A-Z][A-Z0-9_]*/
+            syntax match WorkflowVariable /\$[A-Za-z][A-Za-z0-9_.]*/
             syntax region WorkflowString start=/"/ skip=/\\"/ end=/"/ oneline
             syntax match WorkflowUrl /https\?:\/\/\S\+/
             syntax match WorkflowComment /^\s*#.*/
@@ -126,12 +126,16 @@ local function attach(buffer)
             highlight default link WorkflowComment Comment
         ]])
     end)
-    vim.api.nvim_buf_create_user_command(buffer, 'WorkflowLint', function()
-        plugin.lint(buffer)
-    end, { desc = 'Check this workflow without running it', force = true })
-    vim.api.nvim_buf_create_user_command(buffer, 'WorkflowFormat', function()
-        plugin.format(buffer)
-    end, { desc = 'Format this workflow without saving it', force = true })
+    for _, name in ipairs({ 'SudocLint', 'WorkflowLint' }) do
+        vim.api.nvim_buf_create_user_command(buffer, name, function()
+            plugin.lint(buffer)
+        end, { desc = 'Check this Sudoc document without running it', force = true })
+    end
+    for _, name in ipairs({ 'SudocFormat', 'WorkflowFormat' }) do
+        vim.api.nvim_buf_create_user_command(buffer, name, function()
+            plugin.format(buffer)
+        end, { desc = 'Format this Sudoc document without saving it', force = true })
+    end
     vim.api.nvim_clear_autocmds({ group = group, buffer = buffer })
     vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI', 'BufWritePost' }, {
         group = group,
@@ -150,10 +154,10 @@ local function attach(buffer)
 end
 
 vim.diagnostic.config({ underline = true, signs = true, virtual_text = true }, namespace)
-vim.filetype.add({ extension = { workflow = 'workflow' } })
+vim.filetype.add({ extension = { workflow = 'sudoc', sudoc = 'sudoc' } })
 vim.api.nvim_create_autocmd('FileType', {
     group = group,
-    pattern = 'workflow',
+    pattern = { 'sudoc', 'workflow' },
     callback = function(event) attach(event.buf) end,
 })
 
@@ -161,10 +165,10 @@ vim.api.nvim_create_autocmd('FileType', {
 for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(buffer) then
         local filename = vim.api.nvim_buf_get_name(buffer)
-        if vim.bo[buffer].filetype == 'workflow' then
+        if vim.bo[buffer].filetype == 'sudoc' or vim.bo[buffer].filetype == 'workflow' then
             attach(buffer)
-        elseif filename:match('%.workflow$') then
-            vim.bo[buffer].filetype = 'workflow'
+        elseif filename:match('%.workflow$') or filename:match('%.sudoc$') then
+            vim.bo[buffer].filetype = 'sudoc'
         end
     end
 end

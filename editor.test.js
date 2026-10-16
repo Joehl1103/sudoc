@@ -19,12 +19,12 @@ async function run() {
     const results = [];
     const reportPath = path.join(__dirname, 'editor-test-results.json');
     try {
-        const extension = vscode.extensions.getExtension('local-experiments.workflow-language-experiment');
+        const extension = vscode.extensions.getExtension('local-experiments.sudoc');
         assert.ok(extension, 'The extension must be discoverable.');
         await extension.activate();
 
         const document = await vscode.workspace.openTextDocument({
-            language: 'workflow-experiment',
+            language: 'sudoc',
             content: '@WORKFLOW:\n    ELSE:\n        DO inspect\n',
         });
         const editor = await vscode.window.showTextDocument(document);
@@ -55,9 +55,52 @@ async function run() {
         results.push('Completion offers workflow snippets.');
 
         const example = await vscode.workspace.openTextDocument(path.join(__dirname, 'examples/location-sms.workflow'));
-        assert.equal(example.languageId, 'workflow-experiment');
+        assert.equal(example.languageId, 'sudoc');
         assert.deepEqual(vscode.languages.getDiagnostics(example.uri), []);
         results.push('The .workflow extension selects the language for the full example.');
+        const sudocExample = await vscode.workspace.openTextDocument(path.join(__dirname, 'examples/dropdown-sync.sudoc'));
+        assert.equal(sudocExample.languageId, 'sudoc');
+        assert.deepEqual(vscode.languages.getDiagnostics(sudocExample.uri), []);
+        results.push('The .sudoc extension selects the language for the executable example.');
+
+        const executable = await vscode.workspace.openTextDocument({
+            language: 'sudoc',
+            content: '@WORKFLOW:\n    VERSION 1\n    ON FAILURE STOP\n    DO improvise\n',
+        });
+        const executableEditor = await vscode.window.showTextDocument(executable);
+        await waitFor(() => vscode.languages.getDiagnostics(executable.uri).some(item => item.range.start.line === 3));
+        results.push('Executable grammar diagnoses unauthorized prose in an unsaved document.');
+        const rejectedEdits = await vscode.commands.executeCommand('vscode.executeFormatDocumentProvider', executable.uri, { tabSize: 4, insertSpaces: true });
+        assert.ok(!rejectedEdits || rejectedEdits.length === 0);
+
+        await executableEditor.edit(builder => {
+            builder.replace(new vscode.Range(executable.positionAt(0), executable.positionAt(executable.getText().length)),
+                '@WORKFLOW:\n  VERSION 1\n  INPUT $PORTAL AS Number\n  ON FAILURE STOP\n  CHECK portal_matches:\n    WITH portal = $PORTAL\n    WITH expected = 100001\n');
+        });
+        await waitFor(() => vscode.languages.getDiagnostics(executable.uri).length === 0);
+        const sudocEdits = await vscode.commands.executeCommand('vscode.executeFormatDocumentProvider', executable.uri, { tabSize: 4, insertSpaces: true });
+        assert.ok(sudocEdits && sudocEdits.length > 0);
+        const sudocEdit = new vscode.WorkspaceEdit();
+        sudocEdit.set(executable.uri, sudocEdits);
+        assert.equal(await vscode.workspace.applyEdit(sudocEdit), true);
+        assert.match(executable.getText(), /\n    CHECK portal_matches:\n        WITH portal = \$PORTAL/);
+        results.push('Executable formatting and live diagnostic clearing use the Sudoc parser.');
+
+        const sudocCompletions = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', executable.uri, new vscode.Position(4, 4));
+        for (const label of ['RUN', 'CHECK', 'INTERPRET', 'PROVIDE']) {
+            assert.ok(sudocCompletions.items.some(item => item.label === label));
+        }
+        assert.ok(!sudocCompletions.items.some(item => item.label === 'DO'));
+        const inputSnippet = sudocCompletions.items.find(item => item.label === 'INPUT');
+        assert.match(inputSnippet.insertText.value, /\\\$/);
+        results.push('Executable completion offers boundaries and checks, with escaped variable sigils.');
+
+        await executableEditor.edit(builder => {
+            builder.replace(new vscode.Range(executable.positionAt(0), executable.positionAt(executable.getText().length)),
+                '@WORKFLOW:\n    VERSION 2\n    ON FAILURE STOP\n    DO improvise\n');
+        });
+        await waitFor(() => vscode.languages.getDiagnostics(executable.uri).some(item => item.range.start.line === 1));
+        results.push('Unsupported versions remain in the executable grammar and report errors.');
         fs.writeFileSync(reportPath, JSON.stringify({ passed: true, results }, null, 2) + '\n');
     } catch (error) {
         fs.writeFileSync(reportPath, JSON.stringify({ passed: false, results, error: error.stack }, null, 2) + '\n');

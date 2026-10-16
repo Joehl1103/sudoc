@@ -6,7 +6,7 @@ function editorArguments(projectDirectory) {
     return [
         '-c',
         'lua dofile(vim.env.WORKFLOW_EXPERIMENT_PLUGIN)',
-        path.join(projectDirectory, 'examples/location-sms.workflow'),
+        path.join(projectDirectory, 'examples/dropdown-sync.sudoc'),
     ];
 }
 

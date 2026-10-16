@@ -47,7 +47,7 @@ describe('Command line authoring', () => {
     test('launches the editor with absolute paths independent of its working directory', () => {
         const argumentsList = editorArguments(__dirname);
         assert.ok(argumentsList.includes('lua dofile(vim.env.WORKFLOW_EXPERIMENT_PLUGIN)'));
-        assert.ok(argumentsList.includes(path.join(__dirname, 'examples/location-sms.workflow')));
+        assert.ok(argumentsList.includes(path.join(__dirname, 'examples/dropdown-sync.sudoc')));
         assert.ok(argumentsList.includes('-c'));
     });
 

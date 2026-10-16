@@ -12,7 +12,7 @@ local function run()
     local plugin = dofile(project_directory .. '/nvim/workflow.lua')
     vim.cmd.edit(project_directory .. '/examples/playground.workflow')
     local buffer = vim.api.nvim_get_current_buf()
-    check(vim.bo[buffer].filetype == 'workflow', 'Recognizes .workflow files')
+    check(vim.bo[buffer].filetype == 'sudoc', 'Recognizes .workflow files')
     check(vim.bo[buffer].shiftwidth == 4 and vim.bo[buffer].expandtab, 'Uses four-space indentation')
 
     vim.api.nvim_buf_set_lines(buffer, 0, -1, false, {
@@ -65,6 +65,37 @@ local function run()
     vim.cmd.WorkflowLint()
     vim.wait(500, function() return false end, 20)
     check(#vim.diagnostic.get(buffer, { namespace = plugin.namespace }) == 0, 'Discards stale diagnostic results after further edits')
+
+    vim.cmd('edit! ' .. project_directory .. '/examples/dropdown-sync.sudoc')
+    buffer = vim.api.nvim_get_current_buf()
+    check(vim.bo[buffer].filetype == 'sudoc', 'Recognizes .sudoc files')
+    check(vim.fn.exists(':SudocLint') == 2 and vim.fn.exists(':SudocFormat') == 2, 'Provides Sudoc commands')
+    check(vim.fn.exists(':WorkflowLint') == 2 and vim.fn.exists(':WorkflowFormat') == 2, 'Preserves legacy command aliases')
+    vim.api.nvim_buf_set_lines(buffer, 0, -1, false, {
+        '@WORKFLOW:', '    VERSION 1', '    ON FAILURE STOP', '    DO improvise',
+    })
+    vim.cmd.SudocLint()
+    check(vim.wait(5000, function()
+        for _, diagnostic in ipairs(vim.diagnostic.get(buffer, { namespace = plugin.namespace })) do
+            if diagnostic.lnum == 3 then return true end
+        end
+        return false
+    end, 20), 'Executable grammar rejects undeclared freedom')
+    original = vim.api.nvim_buf_get_lines(buffer, 0, -1, false)
+    vim.cmd.SudocFormat()
+    check(vim.deep_equal(original, vim.api.nvim_buf_get_lines(buffer, 0, -1, false)), 'Refuses to format invalid executable syntax')
+    vim.api.nvim_buf_set_lines(buffer, 0, -1, false, {
+        '@WORKFLOW:', '  VERSION 1', '  INPUT $PORTAL AS Number', '  ON FAILURE STOP',
+        '  CHECK portal_matches:', '    WITH portal = $PORTAL', '    WITH expected = 100001',
+    })
+    vim.cmd.SudocLint()
+    check(vim.wait(5000, function()
+        return #vim.diagnostic.get(buffer, { namespace = plugin.namespace }) == 0
+    end, 20), 'Valid executable source clears old diagnostics')
+    vim.cmd.SudocFormat()
+    check(vim.api.nvim_buf_get_lines(buffer, 4, 6, false)[2] == '        WITH portal = $PORTAL', 'Formats executable source with canonical indentation')
+    check(vim.fn.synIDattr(vim.fn.synID(5, 5, 1), 'name') == 'WorkflowKeyword', 'Highlights executable check keywords')
+    check(vim.bo[buffer].modified, 'Executable formatting leaves changes unsaved')
 
     print('Neovim integration: ' .. #results .. ' checks passed')
 end

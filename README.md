@@ -1,6 +1,17 @@
-# Workflow language experiment
+# sudoc
 
-An experimental language for writing instructions to agents. You define the language as you try it. Indentation defines blocks like Python. This version provides syntax checking and formatting, with no compiler or executor.
+An experimental language for human-authored agent contracts. Indentation defines blocks like Python. The executable first pass makes interpretation explicit, compiles to a constrained execution format, verifies source-to-artifact correspondence, and runs a synthetic dropdown synchronization workflow with independent acceptance checks.
+
+Start with [Sudoc v1](docs/SUDOC.md) for the executable syntax, guarantees, and limitations:
+
+```sh
+node cli.js inspect examples/dropdown-sync.sudoc
+node cli.js compile examples/dropdown-sync.sudoc --out /tmp/dropdown-sync.sudoc.json
+node cli.js verify examples/dropdown-sync.sudoc /tmp/dropdown-sync.sudoc.json
+node cli.js run examples/dropdown-sync.sudoc /tmp/dropdown-sync.sudoc.json --fixture examples/dropdown-sync.fixture.json
+```
+
+The demo changes only an in-memory fixture. Live JEV is opt-in. Source without a `VERSION` declaration retains the legacy authoring-only syntax below; it cannot compile or execute.
 
 ```text
 @WORKFLOW:
@@ -16,11 +27,11 @@ An experimental language for writing instructions to agents. You define the lang
 
 ## Try it in Neovim
 
-From this directory, run `npm run editor`. It opens Neovim with the local plugin loaded and `examples/location-sms.workflow` open. Your Neovim configuration is not modified. Node.js 20+ and Neovim with `vim.system` (0.10+) are required; tested on Neovim 0.12.1.
+From this directory, run `npm run editor`. It opens Neovim with the local plugin loaded and `examples/dropdown-sync.sudoc` open. Your Neovim configuration is not modified. Node.js 20+ and Neovim with `vim.system` (0.10+) are required; tested on Neovim 0.12.1.
 
 - Live diagnostics check unsaved edits after a 200 ms pause.
-- `:WorkflowLint` checks the current buffer immediately.
-- `:WorkflowFormat` normalizes indentation and keywords, changing the buffer without saving it.
+- `:SudocLint` checks the current buffer immediately.
+- `:SudocFormat` normalizes indentation and keywords, changing the buffer without saving it.
 - `:lua vim.diagnostic.open_float()` shows the error at the cursor.
 - Syntax highlighting distinguishes structural keywords, strings, URLs, and comments.
 - Open `examples/playground.workflow` for a smaller starting point.
@@ -31,7 +42,7 @@ To load it in an existing Neovim session:
 :luafile /Users/josephshomefolder/development/ai-experiments/workflow-language/nvim/workflow.lua
 ```
 
-The plugin supports files already open, and future `.workflow` buffers. It changes indentation settings only for workflow buffers. It uses Neovim's built-in diagnostics directly; no language-server setup or plugin-manager dependency is needed. It does not add snippets or a custom indent expression yet: indent blocks manually, then use the formatter to normalize spacing.
+The plugin supports files already open, and future `.sudoc` and `.workflow` buffers. The old `:WorkflowLint` and `:WorkflowFormat` commands remain aliases. It changes indentation settings only for workflow buffers. It uses Neovim's built-in diagnostics directly; no language-server setup or plugin-manager dependency is needed. It does not add snippets or a custom indent expression yet: indent blocks manually, then use the formatter to normalize spacing.
 
 ## Optional VS Code adapter
 
@@ -92,9 +103,19 @@ The header declares the single global `@WORKFLOW` object. Every downstream `@WOR
 
 Only workflow references, variable references, keywords, and structure are checked. Everything else after DEFINE, DO, THEN, USING, NOTE, WHERE, and IF is natural-language text. Descriptions such as `$RECORD's Location Code value` communicate intent to a reader or agent; they are **not evaluated** in v0. Column spellings, URLs, quotes, predicate truth, contradictory instructions, and SMS recipients are not validated. Syntax-valid does not mean ready to execute.
 
-The full SMS example preserves the provided workflow as a draft. Comments expose its unresolved assumptions: stopping the whole batch, the failure-note column, and the source column spelling. It uses the row's location-code value as the SMS body. No spreadsheet or HubSpot instance was accessed.
+The SMS example is a hypothetical draft with non-routable placeholder URLs. Comments expose unresolved assumptions about stopping the whole batch and selecting the failure-note column. It uses the row's location-code value as the SMS body. No spreadsheet or external CRM instance was accessed.
 
 ## Change the language
+
+Executable v1 modules:
+
+- `sudoc-language.js`: parser, contract validation, and formatter.
+- `sudoc-compiler.js`: compilation, canonical hashes, and source/artifact verification.
+- `sudoc-catalog.js` / `sudoc-runtime.js`: registered operations and bounded execution.
+- `sudoc-jev.js`: explicitly invoked live judgment adapter.
+- `sudoc-*.test.js`: compiler tampering, runtime failure injection, CLI, and provider validation.
+
+Legacy and shared tooling:
 
 - `language.js`: recognized statements, indentation tree, checks, and formatter. Both CLI and editor use it.
 - `language.test.js`: intended behavior; start here when changing syntax.

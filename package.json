@@ -1,25 +1,55 @@
 {
-  "name": "workflow-language-experiment",
-  "displayName": "Workflow Language Experiment",
-  "description": "An indentation-based plain-language workflow authoring experiment.",
+  "name": "sudoc",
+  "displayName": "Sudoc",
+  "description": "Structured workflows with explicit interpretation boundaries and verified execution.",
   "version": "0.0.1",
   "publisher": "local-experiments",
   "private": true,
-  "engines": { "vscode": "^1.85.0", "node": ">=20" },
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": ">=20"
+  },
   "main": "./extension.js",
   "scripts": {
-    "test": "node --test language.test.js cli.test.js skill.test.js",
+    "test": "node --test language.test.js cli.test.js skill.test.js sudoc*.test.js",
     "test:nvim": "nvim --headless -u NONE -i NONE -l nvim/test.lua",
     "lint": "node cli.js lint",
     "format": "node cli.js format",
     "editor": "node open-editor.js"
   },
-  "categories": ["Programming Languages", "Formatters"],
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
   "contributes": {
-    "languages": [{ "id": "workflow-experiment", "aliases": ["Workflow Experiment"], "extensions": [".workflow"], "configuration": "./language-configuration.json" }],
-    "grammars": [{ "language": "workflow-experiment", "scopeName": "source.workflow-experiment", "path": "./workflow.tmLanguage.json" }],
+    "languages": [
+      {
+        "id": "sudoc",
+        "aliases": [
+          "Sudoc",
+          "Workflow Experiment"
+        ],
+        "extensions": [
+          ".sudoc",
+          ".workflow"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "sudoc",
+        "scopeName": "source.sudoc",
+        "path": "./workflow.tmLanguage.json"
+      }
+    ],
     "configurationDefaults": {
-      "[workflow-experiment]": { "editor.insertSpaces": true, "editor.tabSize": 4, "editor.detectIndentation": false, "editor.defaultFormatter": "local-experiments.workflow-language-experiment" }
+      "[sudoc]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 4,
+        "editor.detectIndentation": false,
+        "editor.defaultFormatter": "local-experiments.sudoc"
+      }
     }
   }
 }

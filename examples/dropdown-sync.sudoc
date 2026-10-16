@@ -1,0 +1,39 @@
+@WORKFLOW:
+    VERSION 1
+    INPUT $PORTAL AS Number
+    OUTPUT $REPORT AS List
+    ON FAILURE STOP
+
+    CHECK portal_matches:
+        WITH portal = $PORTAL
+        WITH expected = 100001
+    RUN preflight AS $READY:
+        WITH portal = $PORTAL
+        WITH properties = ["branch", "division", "department", "company_number", "region"]
+        WITH objects = ["calls", "meetings", "deals"]
+
+    FOR EACH $TARGET IN $READY.targets:
+        RUN plan_property AS $PLAN:
+            WITH target = $TARGET
+        CHECK preserve_existing:
+            WITH plan = $PLAN
+        IF $PLAN.hasConflicts == true:
+            INTERPRET label_mapping AS $MAPPING:
+                QUESTION "Do these conflicting labels represent equivalent business meanings?"
+                USING read_definitions
+                LIMIT 3
+                EVIDENCE property = $PLAN
+                ACCEPT JEV "Approve only if every conflicting option value retains the same business meaning. Existing option values, labels, and relative order must remain unchanged. Unclear equivalence requires review."
+                CONFIDENCE 0.9
+                ON UNKNOWN REVIEW
+                ON REJECT FAILURE
+        RUN apply_property AS $WRITTEN:
+            WITH plan = $PLAN
+        RUN read_property AS $ACTUAL:
+            WITH target = $TARGET
+        CHECK matches_expected:
+            WITH actual = $ACTUAL
+            WITH expected = $PLAN.expected
+
+    RUN build_report AS $RESULT:
+    PROVIDE $REPORT = $RESULT
