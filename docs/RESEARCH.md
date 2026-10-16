@@ -9,4 +9,4 @@ Checked 2026-09-18. The user explicitly chose to invent a language as an experim
 - [VS Code language contributions](https://code.visualstudio.com/api/references/contribution-points#contributes.languages): language registration, configuration, and grammar contributions.
 - [VS Code programmatic language features](https://code.visualstudio.com/api/language-extensions/programmatic-language-features): diagnostics, completion, and formatting APIs. Integration behavior is exercised locally by editor.test.js.
 
-The example's business rules and URLs come from Joseph's prompt. They were not researched as live integration facts. No agent classifier or external-service dependency is necessary to lint these documents.
+The examples use hypothetical business rules and non-routable placeholder URLs. No agent classifier or external-service dependency is necessary to lint these documents.

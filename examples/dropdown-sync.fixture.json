@@ -1,0 +1,60 @@
+{
+  "description": "Synthetic local simulation. No external CRM requests or real client data.",
+  "portal": 100001,
+  "inputs": { "$PORTAL": 100001 },
+  "sourceProperties": {
+    "branch": {
+      "name": "branch", "label": "Branch", "type": "enumeration", "fieldType": "select",
+      "options": [{ "value": "north", "label": "North" }, { "value": "south", "label": "South" }]
+    },
+    "division": {
+      "name": "division", "label": "Division", "type": "enumeration", "fieldType": "select",
+      "options": [{ "value": "sales", "label": "Sales" }, { "value": "service", "label": "Service" }]
+    },
+    "department": {
+      "name": "department", "label": "Department", "type": "enumeration", "fieldType": "select",
+      "options": [{ "value": "retail", "label": "Retail" }, { "value": "fleet", "label": "Fleet" }]
+    },
+    "company_number": {
+      "name": "company_number", "label": "Company Number", "type": "enumeration", "fieldType": "select",
+      "options": [{ "value": "100", "label": "Company 100" }, { "value": "200", "label": "Company 200" }]
+    },
+    "region": {
+      "name": "region", "label": "Region", "type": "enumeration", "fieldType": "select",
+      "options": [{ "value": "central", "label": "Central" }, { "value": "west", "label": "West" }]
+    }
+  },
+  "objects": {
+    "calls": {
+      "rep_branch": {
+        "name": "rep_branch", "label": "Rep Branch", "type": "enumeration", "fieldType": "select",
+        "options": [{ "value": "north", "label": "Northern" }, { "value": "legacy", "label": "Legacy" }]
+      }
+    },
+    "meetings": {
+      "rep_division": {
+        "name": "rep_division", "label": "Rep Division", "type": "enumeration", "fieldType": "select",
+        "options": [{ "value": "sales", "label": "Sales" }, { "value": "service", "label": "Service" }]
+      }
+    },
+    "deals": {
+      "rep_region": {
+        "name": "rep_region", "label": "Rep Region", "type": "enumeration", "fieldType": "select",
+        "options": [{ "value": "central", "label": "Central" }]
+      }
+    }
+  },
+  "proposals": {
+    "calls/rep_branch": {
+      "equivalent": true,
+      "mappings": [{ "value": "north", "sourceLabel": "North", "existingLabel": "Northern", "equivalent": true }],
+      "rationale": "The synthetic fixture defines North and Northern as the same branch; retain the existing label."
+    }
+  },
+  "judgments": {
+    "calls/rep_branch": {
+      "outcome": "accept", "confidence": 0.98,
+      "probabilities": { "accept": 0.98, "reject": 0.01, "unknown": 0.01 }
+    }
+  }
+}
