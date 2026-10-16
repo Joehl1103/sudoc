@@ -3,15 +3,19 @@ const KEYWORD_PATTERN = /^(@WORKFLOW|FOR\s+EACH|DEFINE|USING|WHERE|DO|THEN|IF|EL
 const VARIABLE_REFERENCE_PATTERN = /\$[A-Za-z][A-Za-z0-9_]*/g;
 const VALID_VARIABLE_NAME_PATTERN = /^\$[A-Z][A-Z0-9_]*$/;
 const WORKFLOW_REFERENCE_PATTERN = /(?:^|[^A-Za-z0-9._%+-])(@[A-Za-z][A-Za-z0-9_]*)/g;
+const { parseContractStatement, checkContracts } = require('./contracts');
 
 // Diagnostics use one-based positions so the CLI and editor share one contract.
 function report(diagnostics, line, code, message, severity = 'error') {
     diagnostics.push({
         line: line.number,
         column: line.indent + 1,
+        endLine: line.number,
+        endColumn: line.indent + 1 + Math.max(1, line.text?.length || 1),
         code,
         message,
         severity,
+        category: 'syntax',
     });
 }
 
@@ -254,7 +258,8 @@ function checkStructure(node, frame, frames, diagnostics) {
 }
 
 // Build a small tree and retain source-line metadata for loss-minimizing formatting.
-function analyze(source) {
+function analyze(source, options = {}) {
+    const mode = /^\s*CONTRACT\b/im.test(source) ? 'contract' : 'legacy';
     const diagnostics = [];
     const roots = [];
     const statements = [];
@@ -280,7 +285,7 @@ function analyze(source) {
             continue;
         }
 
-        const node = parseStatement(line, diagnostics);
+        const node = mode === 'contract' ? parseContractStatement(line, diagnostics) : parseStatement(line, diagnostics);
         if (!previous && node.indent !== 0) {
             report(diagnostics, node, 'root-indent', 'The @WORKFLOW header must begin in column 1.');
         }
@@ -305,24 +310,54 @@ function analyze(source) {
     } else if (workflows.length > 1) {
         report(diagnostics, workflows[1], 'workflow-count', 'Use one @WORKFLOW per file.');
     }
-    checkWorkflowReferences(roots, diagnostics);
-
-    const declarations = new Map();
-    checkVariables(roots, new Map(), declarations, diagnostics);
-    for (const declaration of declarations.values()) {
-        if (declaration.uses === 0) {
-            report(diagnostics, declaration.node, 'unused-variable', `${declaration.name} is defined but never used.`, 'warning');
+    let services;
+    if (mode === 'contract') {
+        services = checkContracts(roots, diagnostics, options, lines);
+    } else {
+        checkWorkflowReferences(roots, diagnostics);
+        const declarations = new Map();
+        checkVariables(roots, new Map(), declarations, diagnostics);
+        for (const declaration of declarations.values()) {
+            if (declaration.uses === 0) {
+                report(diagnostics, declaration.node, 'unused-variable', `${declaration.name} is defined but never used.`, 'warning');
+            }
         }
+        const endLine = node => Math.max(node.number, ...node.children.map(endLine));
+        const symbols = [], references = [];
+        const lexicalEnd = owner => statements.find(node => node.number > owner.number && node.indent <= owner.indent)?.number - 1 || sourceLines.length;
+        const range = (node, name) => ({ line: node.number, column: node.indent + 1 + Math.max(0, node.text.indexOf(name)), endLine: node.number, endColumn: node.indent + 1 + Math.max(0, node.text.indexOf(name)) + name.length });
+        const walk = (nodes, owner, inherited) => {
+            const visible = new Map(inherited);
+            for (const node of nodes) {
+                for (const match of (node.referencedText || '').matchAll(VARIABLE_REFERENCE_PATTERN)) {
+                    const symbol = visible.get(match[0]);
+                    references.push({ name: match[0], ...range(node, match[0]), declaration: symbol?.range, symbol });
+                }
+                const childScope = new Map(visible);
+                if (node.declaredVariable) {
+                    const scopeOwner = node.keyword === 'FOR EACH' ? node : owner;
+                    const symbol = { name: node.declaredVariable, type: 'Any', kind: node.keyword === 'FOR EACH' ? 'loop' : 'definition', node,
+                        range: range(node, node.declaredVariable), scope: { startLine: scopeOwner?.number || 1, endLine: scopeOwner ? lexicalEnd(scopeOwner) : sourceLines.length } };
+                    symbols.push(symbol);
+                    childScope.set(symbol.name, symbol);
+                    if (node.keyword !== 'FOR EACH') visible.set(symbol.name, symbol);
+                }
+                walk(node.children, node, childScope);
+            }
+        };
+        walk(roots, null, new Map());
+        services = { symbols, references };
+        if (options.strict) diagnostics.push({ line: 1, column: 1, endLine: 1, endColumn: 11, category: 'contract', code: 'contract-required', severity: 'error', message: 'Legacy workflows are supported for authoring. Migrate explicitly to CONTRACT 1 before readiness validation.' });
     }
 
     diagnostics.sort((first, second) => first.line - second.line || first.column - second.column);
-    return { roots, lines, diagnostics };
+    return { roots, lines, diagnostics, mode, ready: mode === 'contract' && !diagnostics.some(item => item.severity === 'error' || item.code === 'unfinished-contract'), ...services };
 }
 
 // Formatting only succeeds when hierarchy is unambiguous. Prose stays unchanged.
 function format(source) {
     const result = analyze(source);
-    if (result.diagnostics.some(item => item.severity === 'error')) {
+    if (result.diagnostics.some(item => item.severity === 'error' && item.category === 'syntax')) {
         throw new Error('Fix syntax errors before formatting; indentation determines meaning.');
     }
     const output = result.lines.map(line => {

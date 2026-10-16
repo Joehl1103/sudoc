@@ -85,3 +85,75 @@ describe('Command line authoring', () => {
         assert.equal(run('format', 'example.workflow', '--mystery').status, 2);
     });
 });
+
+describe('Contract CLI services', () => {
+    const example = path.join(__dirname, 'examples', 'sms-contract.workflow');
+    function input(command, source, ...options) {
+        return spawnSync(process.execPath, [path.join(__dirname, 'cli.js'), command, '-', ...options], {
+            input: source, encoding: 'utf8', env: { ...process.env, TYPESAFE_API_KEY: '' },
+        });
+    }
+
+    test('strict check accepts the complete example and explicitly refuses a legacy document', () => {
+        const valid = run('check', example, '--json');
+        assert.equal(valid.status, 0, valid.stderr);
+        assert.deepEqual(JSON.parse(valid.stdout), { mode: 'contract', ready: true, diagnostics: [] });
+        const legacy = input('check', '@WORKFLOW:\n    DO inspect\n', '--json');
+        assert.equal(legacy.status, 1);
+        assert.ok(JSON.parse(legacy.stdout).diagnostics.some(item => item.code === 'contract-required'));
+    });
+
+    test('templates print visible source and incomplete drafts fail readiness', () => {
+        const draft = run('template', 'workflow');
+        assert.equal(draft.status, 0);
+        assert.match(draft.stdout, /INPUT \$SOURCE AS Text FROM \?/);
+        assert.equal(input('lint', draft.stdout, '--json').status, 0);
+        assert.equal(input('check', draft.stdout, '--json').status, 1);
+        assert.equal(run('template', 'not-a-template').status, 2);
+    });
+
+    test('shared completion and navigation commands return JSON using one-based positions', () => {
+        const source = '@WORKFLOW:\n    DEFINE $SOURCE AS rows\n    NOTE $SOURCE\n';
+        const result = input('complete', source, '--line', '3', '--column', '11', '--json');
+        assert.equal(result.status, 0, result.stderr);
+        assert.ok(JSON.parse(result.stdout).some(item => item.label === '$SOURCE'));
+        const target = input('definition', source, '--line', '3', '--column', '12', '--json');
+        assert.equal(target.status, 0);
+        assert.equal(JSON.parse(target.stdout).line, 2);
+        const hover = input('hover', source, '--line', '3', '--column', '12', '--json');
+        assert.match(JSON.parse(hover.stdout).contents, /\$SOURCE/);
+    });
+
+    test('review without credentials is explicitly unreviewed and makes no provider request', () => {
+        const result = input('review', fs.readFileSync(example, 'utf8'), '--json');
+        assert.equal(result.status, 2);
+        const report = JSON.parse(result.stdout);
+        assert.equal(report.status, 'unreviewed');
+        assert.equal(report.reason, 'missing-credentials');
+        assert.equal(report.completedQuestions, 0);
+    });
+
+    test('CLI loads a data-only catalog and rejects malformed catalog contracts', () => {
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'workflow-catalog-'));
+        const catalog = path.join(directory, 'catalog.json');
+        try {
+            fs.writeFileSync(catalog, JSON.stringify({ types: { Ticket: { fields: { description: 'Text' } } } }));
+            const source = '@WORKFLOW:\n    CONTRACT 1\n    INPUT $TICKET AS Ticket FROM "request.ticket"\n    OUTPUT $TEXT AS Text\n    CONDITION $READY AS true\n    PROVIDE $TEXT = $TICKET.description\n    EXIT SUCCESS\n';
+            assert.equal(input('check', source, '--catalog', catalog, '--json').status, 0);
+            fs.writeFileSync(catalog, '{"actions":{"send_sms":{}}}');
+            const invalid = input('check', source, '--catalog', catalog, '--json');
+            assert.equal(invalid.status, 2);
+            assert.match(invalid.stderr, /Invalid domain catalog/);
+        } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+    });
+
+    test('position and command-specific options are validated before reading a file', () => {
+        for (const args of [
+            ['complete', example, '--line', '0', '--column', '1'],
+            ['definition', example, '--line', '1'],
+            ['hover', example, '--line', '1', '--column', '1', '--column', '2'],
+            ['check', example, '--write'], ['review', example, '--write'],
+            ['template', 'sms', '--json'], ['lint', example, '--model', 'jev-latest'],
+        ]) assert.equal(run(...args).status, 2, args.join(' '));
+    });
+});

@@ -1,6 +1,8 @@
 # Workflow language experiment
 
-An experimental language for writing instructions to agents. You define the language as you try it. Indentation defines blocks like Python. This version provides syntax checking and formatting, with no compiler or executor.
+An experimental language for writing instructions to agents. Indentation defines blocks like Python. It provides deterministic contracts, formatting, editor completion, and optional Jev semantic review. No command executes a workflow.
+
+Use `CONTRACT 1` for explicit typed inputs, outputs, conditions, and action outcomes. The [contract reference](docs/CONTRACTS.md) defines the grammar and readiness checks; [examples/sms-contract.workflow](examples/sms-contract.workflow) is a complete authoring example. The original prose syntax below remains supported unchanged. `check` requires contracts; ordinary `lint` still accepts legacy documents.
 
 ```text
 @WORKFLOW:
@@ -21,6 +23,11 @@ From this directory, run `npm run editor`. It opens Neovim with the local plugin
 - Live diagnostics check unsaved edits after a 200 ms pause.
 - `:WorkflowLint` checks the current buffer immediately.
 - `:WorkflowFormat` normalizes indentation and keywords, changing the buffer without saving it.
+- `:WorkflowCheck` checks strict contract readiness, including required bindings and every successful output path.
+- **Ctrl-X Ctrl-O** offers scoped symbols, compatible fields, action arguments, and structural completions. Multiline completions expand into visible source.
+- `:WorkflowDefinition` jumps to the declaration under the cursor; `:WorkflowHover` shows its type or action signature.
+- `:WorkflowTemplate sms` inserts a complete example; `workflow` and `send_sms` insert drafts with explicit `?` holes.
+- `:WorkflowReview` requests an optional Jev review of the current contract document. It runs only when explicitly invoked and uses a separate diagnostic namespace. [Setup and limits](docs/JEV.md).
 - `:lua vim.diagnostic.open_float()` shows the error at the cursor.
 - Syntax highlighting distinguishes structural keywords, strings, URLs, and comments.
 - Open `examples/playground.workflow` for a smaller starting point.
@@ -31,7 +38,7 @@ To load it in an existing Neovim session:
 :luafile /Users/josephshomefolder/development/ai-experiments/workflow-language/nvim/workflow.lua
 ```
 
-The plugin supports files already open, and future `.workflow` buffers. It changes indentation settings only for workflow buffers. It uses Neovim's built-in diagnostics directly; no language-server setup or plugin-manager dependency is needed. It does not add snippets or a custom indent expression yet: indent blocks manually, then use the formatter to normalize spacing.
+The plugin supports files already open, and future `.workflow` buffers. It changes settings only for workflow buffers. It uses Neovim's built-in diagnostics and completion directly; no language-server setup or plugin-manager dependency is needed. CLI and editor adapters share `language-services.js`. Indent blocks manually, then use the formatter to normalize spacing. Custom catalog files are currently selected through the CLI; editors use the built-in catalog.
 
 ## Optional VS Code adapter
 
@@ -46,6 +53,8 @@ This opens an Extension Development Host; the extension is not installed globall
 - Edit either example. Errors appear as underlines and in the Problems panel.
 - Use **Format Document** (Shift+Option+F on macOS) to normalize indentation and keywords.
 - Use completion (Control+Space) for block/step snippets.
+- Use **Go to Definition** and hover for scoped values and action signatures.
+- The command palette includes **Workflow: Check Readiness**, **Workflow: Insert Template**, and **Workflow: Review Meaning with Jev**.
 - A file with syntax errors is not formatted: fix the Problems entries first.
 - Open `examples/playground.workflow` for a smaller starting point.
 
@@ -57,11 +66,17 @@ Node.js 20+; zero runtime dependencies.
 npm test
 npm run test:nvim
 node cli.js lint examples/location-sms.workflow
+node cli.js check examples/sms-contract.workflow
+node cli.js template workflow
+node cli.js template sms
+node cli.js complete examples/sms-contract.workflow --line 13 --column 28 --json
 node cli.js format examples/playground.workflow
 node cli.js format examples/playground.workflow --write
 ```
 
-Formatting prints to stdout unless `--write` is provided. Use `-` as the filename to read stdin, and `lint - --json` for structured editor diagnostics. `format - --write` is rejected. Exit codes: 0 = success (warnings allowed), 1 = syntax errors, 2 = usage/filesystem error. `npm run lint -- <file>` and `npm run format -- <file>` are shortcuts.
+Formatting prints to stdout unless `--write` is provided. Use `-` as the filename to read stdin, and `lint - --json` or `check - --json` for structured diagnostics. `format - --write` is rejected. A structurally valid contract draft can be formatted even if its bindings are incomplete. Exit codes: 0 = successful deterministic check (warnings allowed), 1 = validation failure, 2 = usage/filesystem error. `check` also fails when readiness is false. `review` uses 1 for model concerns or invalid contracts and 2 for incomplete/unavailable review; its JSON always states the status. No semantic review is implied by a successful deterministic check.
+
+`lint`, `check`, `format`, `complete`, `definition`, `hover`, and `review` accept `--catalog catalog.json` to extend the built-in type/action catalog. `complete`, `definition`, and `hover` take one-based `--line` and `--column` and emit JSON. The tool has zero runtime dependencies; optional review uses Node's native HTTP client through `fetch`.
 
 ## Plan a workflow with an agent
 
@@ -96,7 +111,10 @@ The full SMS example preserves the provided workflow as a draft. Comments expose
 
 ## Change the language
 
-- `language.js`: recognized statements, indentation tree, checks, and formatter. Both CLI and editor use it.
+- `language.js`: shared indentation tree, explicit dialect dispatch, legacy checks, and formatter.
+- `contracts.js` / `expression.js` / `catalog.js`: contract scope, path availability, formal expressions, and validated type/action signatures.
+- `language-services.js`: shared context-sensitive completion, definitions, hover, and visible templates.
+- `semantic-review.js`: bounded, explicit Jev review with typed responses and no workflow execution.
 - `language.test.js`: intended behavior; start here when changing syntax.
 - `.agents/skills/workflow-planner`: repository skill that translates authored workflows into agent-owned plans.
 - `extension.js`: live diagnostics, formatting, and completion.
@@ -112,4 +130,4 @@ Re-run the editor tests with isolated VS Code state:
 code --user-data-dir /tmp/workflow-experiment-test-profile --extensions-dir /tmp/workflow-experiment-test-extensions --extensionDevelopmentPath="$PWD" --extensionTestsPath="$PWD/editor.test.js" --disable-workspace-trust --skip-welcome --skip-release-notes
 ```
 
-The host exits after tests and writes `editor-test-results.json` locally (gitignored). `docs/PLAN.md` records the scope; `docs/RESEARCH.md` records related work. No dependency on those languages.
+The host exits after tests and writes `editor-test-results.json` locally (gitignored). `docs/PLAN.md` records the original v0 scope; `docs/CONTRACTS.md` records the contract implementation; `docs/RESEARCH.md` records related work. No dependency on those languages.

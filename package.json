@@ -2,20 +2,27 @@
   "name": "workflow-language-experiment",
   "displayName": "Workflow Language Experiment",
   "description": "An indentation-based plain-language workflow authoring experiment.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "local-experiments",
   "private": true,
   "engines": { "vscode": "^1.85.0", "node": ">=20" },
   "main": "./extension.js",
   "scripts": {
-    "test": "node --test language.test.js cli.test.js skill.test.js",
+    "test": "node --test language.test.js contracts.test.js cli.test.js language-services.test.js semantic-review.test.js skill.test.js",
     "test:nvim": "nvim --headless -u NONE -i NONE -l nvim/test.lua",
     "lint": "node cli.js lint",
+    "check": "node cli.js check",
+    "review": "node cli.js review",
     "format": "node cli.js format",
     "editor": "node open-editor.js"
   },
   "categories": ["Programming Languages", "Formatters"],
   "contributes": {
+    "commands": [
+      { "command": "workflow.check", "title": "Workflow: Check Readiness" },
+      { "command": "workflow.review", "title": "Workflow: Review Meaning with Jev" },
+      { "command": "workflow.insertTemplate", "title": "Workflow: Insert Template" }
+    ],
     "languages": [{ "id": "workflow-experiment", "aliases": ["Workflow Experiment"], "extensions": [".workflow"], "configuration": "./language-configuration.json" }],
     "grammars": [{ "language": "workflow-experiment", "scopeName": "source.workflow-experiment", "path": "./workflow.tmLanguage.json" }],
     "configurationDefaults": {
